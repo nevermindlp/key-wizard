@@ -30,6 +30,31 @@ class Engine:
     def start_click(self, snapshot: AppConfig) -> bool:
         return self._start(RunState.CLICKING, self._run_click, snapshot)
 
+    def start_record(self) -> bool:
+        return self._start(RunState.RECORDING, self._run_record)
+
+    def start_replay(self, snapshot: AppConfig) -> bool:
+        with self._lock:
+            if self.state != RunState.IDLE:
+                return False
+            if not self.recording:
+                self._emit(Progress(state=RunState.IDLE, message="没有录像"))
+                return False
+            events = list(self.recording)
+        return self._start(RunState.PLAYING, self._run_replay, snapshot, events)
+
+    def stop_record(self) -> list | None:
+        with self._lock:
+            recording = self.state == RunState.RECORDING
+            thread = self._thread
+            if recording:
+                self._stop.set()
+        if not recording:
+            return None
+        if thread is not None and thread is not threading.current_thread():
+            thread.join(2.0)
+        return list(self.recording)
+
     def stop(self) -> None:
         with self._lock:
             self._stop.set()
@@ -77,4 +102,14 @@ class Engine:
                 break
             wait = next_interval_ms(snapshot.click, self.rng)
             if not self.backend.sleep_ms(wait, self._stop):
+                break
+
+    def _run_record(self) -> None:
+        while not self._stop.is_set():
+            if not self.backend.sleep_ms(16, self._stop):
+                break
+
+    def _run_replay(self, snapshot: AppConfig, events: list) -> None:
+        while not self._stop.is_set():
+            if not self.backend.sleep_ms(16, self._stop):
                 break

@@ -88,3 +88,17 @@ def test_random_click_sleeps_rng_value():
         ("release", "left", 5, 5),
     ]
     assert engine.state == RunState.IDLE
+
+
+def test_other_starts_are_ignored_while_clicking():
+    backend = FakeBackend()
+    backend.block = True
+    engine = Engine(backend)
+    assert engine.start_click(_click_config(count=5))
+    assert engine.start_record() is False
+    assert engine.start_replay(_click_config()) is False
+    assert engine.stop_record() is None
+    assert engine.state == RunState.CLICKING
+    engine.stop()
+    engine.join()
+    assert engine.state == RunState.IDLE
