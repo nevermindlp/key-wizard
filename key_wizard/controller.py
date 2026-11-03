@@ -178,7 +178,7 @@ class Controller:
         self._last_progress = progress
         if progress.state == RunState.IDLE:
             self._flush_dirty()
-            if progress.message:
+            if progress.message and self.status != "热键监听失败":
                 self.status = progress.message
         else:
             self.status = self._running_text(progress)

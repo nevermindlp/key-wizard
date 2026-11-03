@@ -164,3 +164,15 @@ def test_hotkey_listener_failure_sets_status():
     controller.handle_key("b")
     assert saved["config"].hotkeys.toggle_replay == "b"
     assert controller.view().status == "热键监听失败"
+
+
+def test_idle_progress_keeps_hotkey_listener_failure():
+    controller, engine, saved, _rebinds = _setup(rebind_ok=False)
+    engine.state = RunState.CLICKING
+    controller.on_progress(Progress(state=RunState.CLICKING, clicks_done=1, click_count=20))
+    controller.begin_capture("emergency_stop")
+    controller.handle_key("q")
+    engine.state = RunState.IDLE
+    controller.on_progress(Progress(state=RunState.IDLE, message="空闲"))
+    assert saved["config"].hotkeys.emergency_stop == "q"
+    assert controller.view().status == "热键监听失败"
