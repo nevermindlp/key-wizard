@@ -118,3 +118,54 @@ def test_record_drops_duplicate_points_and_keeps_click_timing():
         MouseEvent("move", 1, 0, 16),
     ]
     assert engine.state == RunState.IDLE
+
+
+def test_replay_repeats_events_in_order():
+    backend = FakeBackend()
+    engine = Engine(backend)
+    engine.recording = [
+        MouseEvent("move", 10, 20, 0),
+        MouseEvent("click", 10, 20, 30, "left", True),
+        MouseEvent("click", 10, 20, 10, "left", False),
+    ]
+    assert engine.start_replay(replace(_click_config(), repeat=2))
+    engine.join()
+    assert backend.actions == [
+        ("move", 10, 20),
+        ("sleep", 30),
+        ("press", "left", 10, 20),
+        ("sleep", 10),
+        ("release", "left", 10, 20),
+        ("move", 10, 20),
+        ("sleep", 30),
+        ("press", "left", 10, 20),
+        ("sleep", 10),
+        ("release", "left", 10, 20),
+    ]
+    assert engine.state == RunState.IDLE
+
+
+def test_replay_stop_releases_pressed_button():
+    backend = FakeBackend()
+    backend.stop_on_sleep = True
+    engine = Engine(backend)
+    engine.recording = [
+        MouseEvent("click", 1, 2, 0, "left", True),
+        MouseEvent("move", 9, 9, 500),
+    ]
+    engine.start_replay(replace(_click_config(), repeat=3))
+    engine.join()
+    assert ("press", "left", 1, 2) in backend.actions
+    assert ("move", 9, 9) not in backend.actions
+    assert ("release", "left", 1, 2) in backend.actions
+
+
+def test_replay_without_recording_does_not_start():
+    backend = FakeBackend()
+    engine = Engine(backend)
+    notes = []
+    engine.add_progress_listener(lambda progress: notes.append(progress.message))
+    assert engine.start_replay(_click_config()) is False
+    assert engine.state == RunState.IDLE
+    assert "没有录像" in notes
+    assert backend.actions == []

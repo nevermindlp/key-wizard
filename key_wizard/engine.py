@@ -25,6 +25,7 @@ class Engine:
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
         self._listeners: list[Callable[[Progress], None]] = []
+        self._pressed: set[str] = set()
 
     def add_progress_listener(self, callback: Callable[[Progress], None]) -> None:
         self._listeners.append(callback)
@@ -75,6 +76,7 @@ class Engine:
                 return False
             self.state = state
             self._stop.clear()
+            self._pressed.clear()
             self._thread = threading.Thread(target=self._guard, args=(target, args), daemon=True)
             self._thread.start()
             return True
@@ -147,7 +149,39 @@ class Engine:
             with self._lock:
                 self.recording = list(events)
 
-    def _run_replay(self, snapshot: AppConfig, events: list) -> None:
-        while not self._stop.is_set():
-            if not self.backend.sleep_ms(16, self._stop):
-                break
+    def _run_replay(self, snapshot: AppConfig, events: list[MouseEvent]) -> None:
+        try:
+            for index in range(snapshot.repeat):
+                if self._stop.is_set():
+                    break
+                self._emit(
+                    Progress(
+                        state=RunState.PLAYING,
+                        repeat_index=index + 1,
+                        repeat_total=snapshot.repeat,
+                    )
+                )
+                for event in events:
+                    if self._stop.is_set():
+                        break
+                    if event.dt_ms > 0 and not self.backend.sleep_ms(event.dt_ms, self._stop):
+                        break
+                    if self._stop.is_set():
+                        break
+                    if event.type == "move":
+                        self.backend.move(event.x, event.y)
+                    elif event.type == "click" and event.button in ("left", "right") and isinstance(event.pressed, bool):
+                        if event.pressed:
+                            self.backend.press(event.button, event.x, event.y)
+                            self._pressed.add(event.button)
+                        else:
+                            self.backend.release(event.button, event.x, event.y)
+                            self._pressed.discard(event.button)
+        finally:
+            self._release_stuck()
+
+    def _release_stuck(self) -> None:
+        x, y = self.backend.position()
+        for button in list(self._pressed):
+            self.backend.release(button, int(x), int(y))
+        self._pressed.clear()
