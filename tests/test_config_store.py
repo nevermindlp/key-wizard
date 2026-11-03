@@ -56,9 +56,19 @@ def test_rejects_random_min_above_max():
 
 def test_rejects_count_and_repeat():
     with pytest.raises(ConfigError, match="点击次数"):
-        validate_click_fields("fixed", 200, 100, 300, 0)
+        validate_click_fields("fixed", 200, 100, 300, -1)
+    with pytest.raises(ConfigError, match="点击次数"):
+        validate_click_fields("fixed", 200, 100, 300, 100001)
     with pytest.raises(ConfigError, match="重复次数"):
         validate_repeat(10001)
+    with pytest.raises(ConfigError, match="重复次数"):
+        validate_repeat(-1)
+
+
+def test_zero_count_and_repeat_mean_unlimited():
+    click = validate_click_fields("fixed", 200, 100, 300, 0)
+    assert click.count == 0
+    assert validate_repeat(0) == 0
 
 
 def test_rejects_duplicate_and_unknown_hotkeys():

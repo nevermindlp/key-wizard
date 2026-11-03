@@ -1,5 +1,17 @@
 from __future__ import annotations
 
+import sys
+
+if sys.platform == "win32":
+    import ctypes
+    from ctypes import wintypes
+
+    _user32 = ctypes.WinDLL("user32", use_last_error=True)
+    _user32.SetProcessDpiAwarenessContext.restype = wintypes.BOOL
+    _user32.SetProcessDpiAwarenessContext.argtypes = [ctypes.c_void_p]
+    # 必须先于 tkinter。否则回放只能改到坐标，屏幕上的指针不动。
+    _user32.SetProcessDpiAwarenessContext(ctypes.c_void_p(-4))
+
 import queue
 from pathlib import Path
 

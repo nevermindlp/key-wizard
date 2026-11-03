@@ -93,7 +93,7 @@ class App:
         self.fixed_entry = self._labeled_entry(frame, 1, "固定间隔（毫秒）", self.fixed_var, self._commit_fixed)
         self.min_entry = self._labeled_entry(frame, 2, "随机最小（毫秒）", self.min_var, self._commit_min)
         self.max_entry = self._labeled_entry(frame, 3, "随机最大（毫秒）", self.max_var, self._commit_max)
-        self.count_entry = self._labeled_entry(frame, 4, "点击次数", self.count_var, self._commit_count)
+        self.count_entry = self._labeled_entry(frame, 4, "点击次数（0 为无限）", self.count_var, self._commit_count)
         self.click_button = ttk.Button(frame, text="开始连点", command=self.controller.toggle_click)
         self.click_button.grid(row=5, column=0, columnspan=2, sticky="ew", padx=8, pady=8)
 
@@ -101,7 +101,7 @@ class App:
         frame = ttk.LabelFrame(root, text="录制回放")
         frame.pack(fill="x", padx=12, pady=6)
         self.repeat_var = tk.StringVar()
-        self.repeat_entry = self._labeled_entry(frame, 0, "重复次数", self.repeat_var, self._commit_repeat)
+        self.repeat_entry = self._labeled_entry(frame, 0, "重复次数（0 为无限）", self.repeat_var, self._commit_repeat)
         self.summary_label = ttk.Label(frame, text="尚未录制")
         self.summary_label.grid(row=1, column=0, columnspan=2, sticky="w", padx=8, pady=4)
         self.record_button = ttk.Button(frame, text="开始录制", command=self.controller.start_record)

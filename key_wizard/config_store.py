@@ -37,8 +37,8 @@ def validate_click_fields(
             raise ConfigError("间隔必须是 10 到 60000 的整数")
     if interval_mode == "random" and int(interval_min_ms) > int(interval_max_ms):
         raise ConfigError("随机间隔的最小值不能大于最大值")
-    if not _is_int(count) or not 1 <= int(count) <= 100000:
-        raise ConfigError("点击次数必须是 1 到 100000 的整数")
+    if not _is_int(count) or not 0 <= int(count) <= 100000:
+        raise ConfigError("点击次数必须是 0 到 100000 的整数，0 表示无限")
     return ClickConfig(
         str(interval_mode),
         int(interval_ms),
@@ -49,8 +49,8 @@ def validate_click_fields(
 
 
 def validate_repeat(repeat: object) -> int:
-    if not _is_int(repeat) or not 1 <= int(repeat) <= 10000:
-        raise ConfigError("重复次数必须是 1 到 10000 的整数")
+    if not _is_int(repeat) or not 0 <= int(repeat) <= 10000:
+        raise ConfigError("重复次数必须是 0 到 10000 的整数，0 表示无限")
     return int(repeat)
 
 

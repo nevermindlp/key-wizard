@@ -160,6 +160,38 @@ def test_replay_stop_releases_pressed_button():
     assert ("release", "left", 1, 2) in backend.actions
 
 
+def test_zero_count_clicks_until_stopped():
+    backend = FakeBackend()
+    backend.sleep_limit = 2
+    backend.positions = [(1, 1), (2, 2), (3, 3), (4, 4)]
+    engine = Engine(backend)
+    assert engine.start_click(_click_config(count=0, interval=40))
+    engine.join()
+    presses = [item for item in backend.actions if item[0] == "press"]
+    assert presses == [
+        ("press", "left", 1, 1),
+        ("press", "left", 2, 2),
+        ("press", "left", 3, 3),
+    ]
+    assert engine.state == RunState.IDLE
+
+
+def test_zero_repeat_replays_until_stopped():
+    backend = FakeBackend()
+    backend.sleep_limit = 2
+    engine = Engine(backend)
+    engine.recording = [MouseEvent("move", 7, 8, 15)]
+    assert engine.start_replay(replace(_click_config(), repeat=0))
+    engine.join()
+    assert backend.actions == [
+        ("sleep", 15),
+        ("move", 7, 8),
+        ("sleep", 15),
+        ("move", 7, 8),
+    ]
+    assert engine.state == RunState.IDLE
+
+
 def test_replay_without_recording_does_not_start():
     backend = FakeBackend()
     engine = Engine(backend)

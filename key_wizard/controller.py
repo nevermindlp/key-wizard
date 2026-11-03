@@ -112,7 +112,7 @@ class Controller:
         try:
             repeat = validate_repeat(int(text))
         except (ValueError, ConfigError) as exc:
-            self.status = str(exc) if isinstance(exc, ConfigError) else "重复次数必须是 1 到 10000 的整数"
+            self.status = str(exc) if isinstance(exc, ConfigError) else "重复次数必须是 0 到 10000 的整数，0 表示无限"
             return
         self.edited = replace(self.edited, repeat=repeat)
         self.status = "空闲"
@@ -279,11 +279,17 @@ class Controller:
 
     def _running_text(self, progress: Progress) -> str:
         if progress.state == RunState.CLICKING:
-            text = f"已点击 {progress.clicks_done}/{progress.click_count}"
+            if progress.click_count == 0:
+                text = f"已点击 {progress.clicks_done}（无限）"
+            else:
+                text = f"已点击 {progress.clicks_done}/{progress.click_count}"
         elif progress.state == RunState.RECORDING:
             text = f"已记录 {progress.event_count} 个事件，时长 {progress.elapsed_ms} 毫秒"
         elif progress.state == RunState.PLAYING:
-            text = f"第 {progress.repeat_index}/{progress.repeat_total} 次"
+            if progress.repeat_total == 0:
+                text = f"第 {progress.repeat_index} 次（无限）"
+            else:
+                text = f"第 {progress.repeat_index}/{progress.repeat_total} 次"
         else:
             text = progress.message or "空闲"
         return f"{text}。修改会在本次结束后生效"

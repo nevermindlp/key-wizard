@@ -72,7 +72,7 @@ def test_idle_count_saves_without_rebinding_hotkeys():
 
 def test_invalid_count_restores_previous_text():
     controller, _engine, saved, _rebinds = _setup()
-    controller.commit_count("0")
+    controller.commit_count("-1")
     assert "config" not in saved
     assert controller.view().count == "20"
     assert "点击次数" in controller.view().status

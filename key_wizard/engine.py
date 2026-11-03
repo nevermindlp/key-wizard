@@ -96,13 +96,16 @@ class Engine:
     def _run_click(self, snapshot: AppConfig) -> None:
         done = 0
         total = snapshot.click.count
-        while done < total and not self._stop.is_set():
+        unlimited = total == 0
+        while not self._stop.is_set():
             x, y = self.backend.position()
             self.backend.press("left", int(x), int(y))
             self.backend.release("left", int(x), int(y))
             done += 1
             self._emit(Progress(state=RunState.CLICKING, clicks_done=done, click_count=total))
-            if done >= total or self._stop.is_set():
+            if not unlimited and done >= total:
+                break
+            if self._stop.is_set():
                 break
             wait = next_interval_ms(snapshot.click, self.rng)
             if not self.backend.sleep_ms(wait, self._stop):
@@ -151,13 +154,16 @@ class Engine:
 
     def _run_replay(self, snapshot: AppConfig, events: list[MouseEvent]) -> None:
         try:
-            for index in range(snapshot.repeat):
-                if self._stop.is_set():
+            index = 0
+            unlimited = snapshot.repeat == 0
+            while not self._stop.is_set():
+                if not unlimited and index >= snapshot.repeat:
                     break
+                index += 1
                 self._emit(
                     Progress(
                         state=RunState.PLAYING,
-                        repeat_index=index + 1,
+                        repeat_index=index,
                         repeat_total=snapshot.repeat,
                     )
                 )
