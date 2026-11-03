@@ -202,15 +202,36 @@ def test_stop_publishes_edited_config_before_next_hotkey():
     assert status != "空闲"
 
 
+def test_second_toggle_click_does_not_stop_until_deadline():
+    controller, engine, _saved, _rebinds = _setup()
+    controller.toggle_click()
+    controller.toggle_click()
+    assert [call[0] for call in engine.calls] == ["click"]
+    controller._suppress_until["click"] = 0
+    controller.toggle_click()
+    assert [call[0] for call in engine.calls] == ["click", "stop"]
+
+
 def test_second_toggle_click_does_not_restart_until_deadline():
     controller, engine, _saved, _rebinds = _setup()
     engine.state = RunState.CLICKING
     controller.toggle_click()
     controller.toggle_click()
-    assert engine.calls == [("stop",)]
+    assert [call[0] for call in engine.calls] == ["stop"]
     controller._suppress_until["click"] = 0
     controller.toggle_click()
     assert [call[0] for call in engine.calls] == ["stop", "click"]
+
+
+def test_second_toggle_replay_does_not_stop_until_deadline():
+    controller, engine, _saved, _rebinds = _setup()
+    engine.recording = [MouseEvent("move", 1, 1, 0)]
+    controller.toggle_replay()
+    controller.toggle_replay()
+    assert [call[0] for call in engine.calls] == ["replay"]
+    controller._suppress_until["replay"] = 0
+    controller.toggle_replay()
+    assert [call[0] for call in engine.calls] == ["replay", "stop"]
 
 
 def test_start_click_flushes_pending_edit_before_snapshot():

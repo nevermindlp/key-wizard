@@ -8,7 +8,7 @@ from key_wizard.config_store import ConfigError, recording_duration_ms, validate
 from key_wizard.keys import display_key, normalize_hotkey
 from key_wizard.models import AppConfig, Hotkeys, MouseEvent, Progress, RunState
 
-_RESTART_SUPPRESS_S = 0.4
+_TOGGLE_SUPPRESS_S = 0.5
 
 
 @dataclass(frozen=True)
@@ -142,13 +142,7 @@ class Controller:
             self.toggle_replay()
 
     def toggle_click(self) -> None:
-        if self.engine.state == RunState.CLICKING:
-            self._stop_toggle("click")
-            return
-        if self.engine.state != RunState.IDLE or self._restart_suppressed("click"):
-            return
-        self._flush_dirty()
-        self.engine.start_click(self.applied)
+        self._toggle_action("click", RunState.CLICKING, self._start_click)
 
     def start_record(self) -> None:
         if self.engine.state != RunState.IDLE:
@@ -165,16 +159,7 @@ class Controller:
             self._flush_dirty()
 
     def toggle_replay(self) -> None:
-        if self.engine.state == RunState.PLAYING:
-            self._stop_toggle("replay")
-            return
-        if self.engine.state != RunState.IDLE or self._restart_suppressed("replay"):
-            return
-        if not self.engine.recording:
-            self.status = "没有录像"
-            return
-        self._flush_dirty()
-        self.engine.start_replay(self.applied)
+        self._toggle_action("replay", RunState.PLAYING, self._start_replay)
 
     def emergency_stop(self) -> None:
         if self.engine.state == RunState.RECORDING:
@@ -204,14 +189,29 @@ class Controller:
         if self._on_shutdown is not None:
             self._on_shutdown()
 
-    def _stop_toggle(self, action: str) -> None:
-        self.engine.stop()
-        self._suppress_until[action] = time.monotonic() + _RESTART_SUPPRESS_S
-        if self.engine.state == RunState.IDLE:
-            self._flush_dirty()
+    def _toggle_action(self, action: str, running: RunState, start: Callable[[], bool]) -> None:
+        if time.monotonic() < self._suppress_until[action]:
+            return
+        if self.engine.state == running:
+            self.engine.stop()
+            self._suppress_until[action] = time.monotonic() + _TOGGLE_SUPPRESS_S
+            if self.engine.state == RunState.IDLE:
+                self._flush_dirty()
+            return
+        if self.engine.state != RunState.IDLE or not start():
+            return
+        self._suppress_until[action] = time.monotonic() + _TOGGLE_SUPPRESS_S
 
-    def _restart_suppressed(self, action: str) -> bool:
-        return time.monotonic() < self._suppress_until[action]
+    def _start_click(self) -> bool:
+        self._flush_dirty()
+        return bool(self.engine.start_click(self.applied))
+
+    def _start_replay(self) -> bool:
+        if not self.engine.recording:
+            self.status = "没有录像"
+            return False
+        self._flush_dirty()
+        return bool(self.engine.start_replay(self.applied))
 
     def _commit_click(self, text: str, field: str) -> None:
         click = self.edited.click
