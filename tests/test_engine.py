@@ -2,7 +2,7 @@ from dataclasses import replace
 
 from key_wizard.config_store import default_config
 from key_wizard.engine import Engine, next_interval_ms
-from key_wizard.models import RunState
+from key_wizard.models import MouseEvent, RunState
 from tests.fake_backend import FakeBackend
 
 
@@ -101,4 +101,20 @@ def test_other_starts_are_ignored_while_clicking():
     assert engine.state == RunState.CLICKING
     engine.stop()
     engine.join()
+    assert engine.state == RunState.IDLE
+
+
+def test_record_drops_duplicate_points_and_keeps_click_timing():
+    backend = FakeBackend()
+    backend.sleep_limit = 3
+    backend.positions = [(0, 0), (0, 0), (1, 0)]
+    backend.click_on_sleep = (2, (5, 5, "right", True))
+    engine = Engine(backend)
+    assert engine.start_record()
+    engine.join()
+    assert engine.recording == [
+        MouseEvent("move", 0, 0, 0),
+        MouseEvent("click", 5, 5, 16, "right", True),
+        MouseEvent("move", 1, 0, 16),
+    ]
     assert engine.state == RunState.IDLE

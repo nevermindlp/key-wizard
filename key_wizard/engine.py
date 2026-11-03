@@ -4,7 +4,7 @@ import random
 import threading
 from collections.abc import Callable
 
-from key_wizard.models import AppConfig, ClickConfig, Progress, RunState
+from key_wizard.models import AppConfig, ClickConfig, MouseEvent, Progress, RunState
 
 
 def next_interval_ms(click: ClickConfig, rng: Callable[[int, int], int]) -> int:
@@ -14,6 +14,8 @@ def next_interval_ms(click: ClickConfig, rng: Callable[[int, int], int]) -> int:
 
 
 class Engine:
+    SAMPLE_MS = 16
+
     def __init__(self, backend, rng: Callable[[int, int], int] | None = None) -> None:
         self.backend = backend
         self.rng = rng or random.randint
@@ -105,9 +107,45 @@ class Engine:
                 break
 
     def _run_record(self) -> None:
-        while not self._stop.is_set():
-            if not self.backend.sleep_ms(16, self._stop):
-                break
+        events: list[MouseEvent] = []
+        last_move: tuple[int, int] | None = None
+        last_ms: int | None = None
+
+        def append(kind: str, x: int, y: int, button: str | None = None, pressed: bool | None = None) -> None:
+            nonlocal last_ms
+            with self._lock:
+                now = int(self.backend.now_ms())
+                dt = 0 if last_ms is None else max(0, now - last_ms)
+                last_ms = now
+                event = MouseEvent(kind, int(x), int(y), dt, button, pressed)
+                events.append(event)
+                self.recording = list(events)
+                elapsed = sum(item.dt_ms for item in events)
+                count = len(events)
+            self._emit(Progress(state=RunState.RECORDING, event_count=count, elapsed_ms=elapsed))
+
+        def on_click(x: int, y: int, button: str, pressed: bool) -> None:
+            if self._stop.is_set():
+                return
+            if button not in ("left", "right"):
+                return
+            append("click", x, y, button, pressed)
+
+        self.backend.start_mouse_listener(on_click)
+        try:
+            while not self._stop.is_set():
+                if not self.backend.sleep_ms(self.SAMPLE_MS, self._stop):
+                    break
+                x, y = self.backend.position()
+                point = (int(x), int(y))
+                if point == last_move:
+                    continue
+                last_move = point
+                append("move", point[0], point[1])
+        finally:
+            self.backend.stop_mouse_listener()
+            with self._lock:
+                self.recording = list(events)
 
     def _run_replay(self, snapshot: AppConfig, events: list) -> None:
         while not self._stop.is_set():
