@@ -140,6 +140,8 @@ class Controller:
     def toggle_click(self) -> None:
         if self.engine.state == RunState.CLICKING:
             self.engine.stop()
+            if self.engine.state == RunState.IDLE:
+                self._flush_dirty()
             return
         if self.engine.state != RunState.IDLE:
             return
@@ -155,11 +157,14 @@ class Controller:
             return
         events = self.engine.stop_record() or []
         self._save_recording(events)
-        self._flush_dirty()
+        if self.engine.state == RunState.IDLE:
+            self._flush_dirty()
 
     def toggle_replay(self) -> None:
         if self.engine.state == RunState.PLAYING:
             self.engine.stop()
+            if self.engine.state == RunState.IDLE:
+                self._flush_dirty()
             return
         if self.engine.state != RunState.IDLE:
             return
@@ -173,8 +178,12 @@ class Controller:
             self.stop_record()
         elif self.engine.state != RunState.IDLE:
             self.engine.stop()
+            if self.engine.state == RunState.IDLE:
+                self._flush_dirty()
 
     def on_progress(self, progress: Progress) -> None:
+        if progress.state == RunState.IDLE and self.engine.state != RunState.IDLE:
+            return
         self._last_progress = progress
         if progress.state == RunState.IDLE:
             self._flush_dirty()

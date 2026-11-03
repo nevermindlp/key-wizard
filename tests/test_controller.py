@@ -176,3 +176,26 @@ def test_idle_progress_keeps_hotkey_listener_failure():
     controller.on_progress(Progress(state=RunState.IDLE, message="空闲"))
     assert saved["config"].hotkeys.emergency_stop == "q"
     assert controller.view().status == "热键监听失败"
+
+
+def test_stop_publishes_edited_config_before_next_hotkey():
+    controller, engine, saved, _rebinds = _setup()
+    engine.state = RunState.CLICKING
+    controller.on_progress(Progress(state=RunState.CLICKING, clicks_done=1, click_count=20))
+    controller.commit_interval_ms("500")
+    controller.begin_capture("toggle_click")
+    controller.handle_key("k")
+    controller.handle_key("f6")
+    assert saved["config"].click.interval_ms == 500
+    assert saved["config"].hotkeys.toggle_click == "k"
+    controller.handle_key("f6")
+    assert all(call[0] != "click" for call in engine.calls)
+    controller.handle_key("k")
+    assert engine.calls[-1][0] == "click"
+    snapshot = engine.calls[-1][1]
+    assert snapshot.click.interval_ms == 500
+    assert snapshot.hotkeys.toggle_click == "k"
+    controller.on_progress(Progress(state=RunState.IDLE, message="空闲"))
+    status = controller.view().status
+    assert "已点击" in status or "本次结束后生效" in status
+    assert status != "空闲"
