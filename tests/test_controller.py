@@ -190,6 +190,7 @@ def test_stop_publishes_edited_config_before_next_hotkey():
     assert saved["config"].hotkeys.toggle_click == "k"
     controller.handle_key("f6")
     assert all(call[0] != "click" for call in engine.calls)
+    controller._suppress_until["click"] = 0
     controller.handle_key("k")
     assert engine.calls[-1][0] == "click"
     snapshot = engine.calls[-1][1]
@@ -199,3 +200,47 @@ def test_stop_publishes_edited_config_before_next_hotkey():
     status = controller.view().status
     assert "已点击" in status or "本次结束后生效" in status
     assert status != "空闲"
+
+
+def test_second_toggle_click_does_not_restart_until_deadline():
+    controller, engine, _saved, _rebinds = _setup()
+    engine.state = RunState.CLICKING
+    controller.toggle_click()
+    controller.toggle_click()
+    assert engine.calls == [("stop",)]
+    controller._suppress_until["click"] = 0
+    controller.toggle_click()
+    assert [call[0] for call in engine.calls] == ["stop", "click"]
+
+
+def test_start_click_flushes_pending_edit_before_snapshot():
+    controller, engine, saved, _rebinds = _setup()
+    engine.state = RunState.CLICKING
+    controller.on_progress(Progress(state=RunState.CLICKING, clicks_done=1, click_count=20))
+    controller.commit_interval_ms("500")
+    engine.state = RunState.IDLE
+    order = []
+
+    def save_config(config):
+        order.append([call[0] for call in engine.calls])
+        saved["config"] = config
+
+    controller._save_config = save_config
+    controller.toggle_click()
+    assert order == [[]]
+    assert engine.calls[0][0] == "click"
+    assert engine.calls[0][1].click.interval_ms == 500
+    assert saved["config"].click.interval_ms == 500
+    controller.on_progress(Progress(state=RunState.IDLE, message="空闲"))
+    status = controller.view().status
+    assert "已点击" in status
+    assert status != "空闲"
+
+
+def test_text_focus_does_not_start_click():
+    controller, engine, saved, _rebinds = _setup()
+    controller.handle_key("f6", text_focused=True)
+    assert engine.calls == []
+    controller.begin_capture("toggle_click")
+    controller.handle_key("a", text_focused=True)
+    assert saved["config"].hotkeys.toggle_click == "a"

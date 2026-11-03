@@ -12,6 +12,25 @@ def dispatch_key(key: object, on_key: Callable[[str], None]) -> None:
         on_key(name)
 
 
+class HeldKeys:
+    """按住期间只交出一次按下，松开后才能再触发。"""
+
+    def __init__(self) -> None:
+        self._names: set[str] = set()
+
+    def press(self, key: object, on_key: Callable[[str], None]) -> None:
+        name = pynput_key_to_name(key)
+        if name is None or name in self._names:
+            return
+        self._names.add(name)
+        on_key(name)
+
+    def release(self, key: object) -> None:
+        name = pynput_key_to_name(key)
+        if name is not None:
+            self._names.discard(name)
+
+
 class PynputBackend:
     """Windows 上使用 pynput。单元测试不要调用移动和点击。"""
 
@@ -74,12 +93,16 @@ class PynputBackend:
         except Exception:
             return False
         self.stop_hotkey_listener()
+        held = HeldKeys()
 
         def on_press(key):
-            dispatch_key(key, on_key)
+            held.press(key, on_key)
+
+        def on_release(key):
+            held.release(key)
 
         try:
-            listener = keyboard.Listener(on_press=on_press)
+            listener = keyboard.Listener(on_press=on_press, on_release=on_release)
             listener.start()
         except Exception:
             return False

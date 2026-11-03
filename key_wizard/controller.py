@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+import time
 from collections.abc import Callable
 from dataclasses import dataclass, replace
 
 from key_wizard.config_store import ConfigError, recording_duration_ms, validate_click_fields, validate_repeat
 from key_wizard.keys import display_key, normalize_hotkey
 from key_wizard.models import AppConfig, Hotkeys, MouseEvent, Progress, RunState
+
+_RESTART_SUPPRESS_S = 0.4
 
 
 @dataclass(frozen=True)
@@ -52,6 +55,7 @@ class Controller:
         self.capturing: str | None = None
         self._dirty = False
         self._last_progress: Progress | None = None
+        self._suppress_until = {"click": 0.0, "replay": 0.0}
 
     def view(self) -> ViewState:
         click = self.edited.click
@@ -118,12 +122,12 @@ class Controller:
         self.capturing = field
         self.status = "请按下新的快捷键"
 
-    def handle_key(self, raw: str) -> None:
+    def handle_key(self, raw: str, text_focused: bool = False) -> None:
         name = normalize_hotkey(raw)
         if self.capturing:
             self._finish_capture(name)
             return
-        if name is None:
+        if text_focused or name is None:
             return
         hotkeys = self.applied.hotkeys
         if name == hotkeys.emergency_stop:
@@ -139,17 +143,17 @@ class Controller:
 
     def toggle_click(self) -> None:
         if self.engine.state == RunState.CLICKING:
-            self.engine.stop()
-            if self.engine.state == RunState.IDLE:
-                self._flush_dirty()
+            self._stop_toggle("click")
             return
-        if self.engine.state != RunState.IDLE:
+        if self.engine.state != RunState.IDLE or self._restart_suppressed("click"):
             return
+        self._flush_dirty()
         self.engine.start_click(self.applied)
 
     def start_record(self) -> None:
         if self.engine.state != RunState.IDLE:
             return
+        self._flush_dirty()
         self.engine.start_record()
 
     def stop_record(self) -> None:
@@ -162,15 +166,14 @@ class Controller:
 
     def toggle_replay(self) -> None:
         if self.engine.state == RunState.PLAYING:
-            self.engine.stop()
-            if self.engine.state == RunState.IDLE:
-                self._flush_dirty()
+            self._stop_toggle("replay")
             return
-        if self.engine.state != RunState.IDLE:
+        if self.engine.state != RunState.IDLE or self._restart_suppressed("replay"):
             return
         if not self.engine.recording:
             self.status = "没有录像"
             return
+        self._flush_dirty()
         self.engine.start_replay(self.applied)
 
     def emergency_stop(self) -> None:
@@ -200,6 +203,15 @@ class Controller:
         self._flush_dirty()
         if self._on_shutdown is not None:
             self._on_shutdown()
+
+    def _stop_toggle(self, action: str) -> None:
+        self.engine.stop()
+        self._suppress_until[action] = time.monotonic() + _RESTART_SUPPRESS_S
+        if self.engine.state == RunState.IDLE:
+            self._flush_dirty()
+
+    def _restart_suppressed(self, action: str) -> bool:
+        return time.monotonic() < self._suppress_until[action]
 
     def _commit_click(self, text: str, field: str) -> None:
         click = self.edited.click

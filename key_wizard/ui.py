@@ -54,7 +54,7 @@ class App:
             if kind == "progress":
                 self.controller.on_progress(payload)
             elif kind == "key":
-                self.controller.handle_key(payload)
+                self.controller.handle_key(payload, text_focused=self._text_focused())
         self.render()
         if self.root.winfo_exists():
             self._after_id = self.root.after(50, self.poll)
@@ -140,6 +140,16 @@ class App:
 
     def _state(self, enabled: bool) -> str:
         return "normal" if enabled else "disabled"
+
+    def _text_focused(self) -> bool:
+        focused = self.root.focus_get()
+        return focused in (
+            self.fixed_entry,
+            self.min_entry,
+            self.max_entry,
+            self.count_entry,
+            self.repeat_entry,
+        )
 
     def _begin_capture(self, field: str) -> None:
         self.controller.begin_capture(field)
