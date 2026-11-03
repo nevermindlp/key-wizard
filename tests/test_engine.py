@@ -43,12 +43,16 @@ def test_click_follows_cursor_and_stops_after_count():
     engine = Engine(backend)
     assert engine.start_click(_click_config(count=3, interval=200))
     engine.join()
-    assert [item for item in backend.actions if item[0] == "press"] == [
+    assert backend.actions == [
         ("press", "left", 1, 1),
+        ("release", "left", 1, 1),
+        ("sleep", 200),
         ("press", "left", 2, 2),
+        ("release", "left", 2, 2),
+        ("sleep", 200),
         ("press", "left", 3, 3),
+        ("release", "left", 3, 3),
     ]
-    assert [item for item in backend.actions if item[0] == "sleep"] == [("sleep", 200), ("sleep", 200)]
     assert engine.state == RunState.IDLE
 
 
@@ -66,7 +70,21 @@ def test_stop_during_wait_does_not_click_again():
 def test_random_click_sleeps_rng_value():
     backend = FakeBackend()
     backend.positions = [(4, 4), (5, 5)]
-    engine = Engine(backend, rng=lambda a, b: 123)
+    calls = []
+
+    def rng(low, high):
+        calls.append((low, high))
+        return 123
+
+    engine = Engine(backend, rng=rng)
     engine.start_click(_click_config(count=2, mode="random", low=100, high=300))
     engine.join()
-    assert ("sleep", 123) in backend.actions
+    assert calls == [(100, 300)]
+    assert backend.actions == [
+        ("press", "left", 4, 4),
+        ("release", "left", 4, 4),
+        ("sleep", 123),
+        ("press", "left", 5, 5),
+        ("release", "left", 5, 5),
+    ]
+    assert engine.state == RunState.IDLE

@@ -31,8 +31,11 @@ class Engine:
         return self._start(RunState.CLICKING, self._run_click, snapshot)
 
     def stop(self) -> None:
-        self._stop.set()
-        self.join()
+        with self._lock:
+            self._stop.set()
+            thread = self._thread
+        if thread is not None and thread is not threading.current_thread():
+            thread.join(2.0)
 
     def join(self, timeout: float = 2.0) -> None:
         thread = self._thread
