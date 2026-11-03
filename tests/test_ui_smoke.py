@@ -46,12 +46,23 @@ def test_window_shows_default_hotkeys_and_capture():
     )
     events: queue.Queue = queue.Queue()
     app = App(root, controller, events)
+    root.deiconify()
     root.update_idletasks()
     assert root.title() == "按键精灵"
     assert app.click_button.cget("text") == "开始连点"
     assert app.hotkey_value_labels["toggle_click"].cget("text") == "F6"
     assert str(app.fixed_entry.cget("state")) == "normal"
     assert str(app.min_entry.cget("state")) == "disabled"
+    emergency = app.capture_buttons["emergency_stop"]
+    assert emergency.winfo_ismapped()
+    emergency_bottom = 0
+    widget = emergency
+    while widget is not None and widget is not root:
+        emergency_bottom += widget.winfo_y()
+        parent = widget.winfo_parent()
+        widget = widget.nametowidget(parent) if parent else None
+    emergency_bottom += emergency.winfo_height()
+    assert emergency_bottom <= root.winfo_height()
     app.capture_buttons["start_record"].invoke()
     root.update()
     assert app.status_label.cget("text") == "请按下新的快捷键"

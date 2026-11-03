@@ -22,7 +22,6 @@ class App:
         self.controller = controller
         self.events = events
         root.title("按键精灵")
-        root.geometry("520x620")
         root.protocol("WM_DELETE_WINDOW", self.close)
         self.status_label = ttk.Label(root, text="")
         self.status_label.pack(fill="x", padx=12, pady=(12, 6))
@@ -31,6 +30,12 @@ class App:
         self._build_hotkeys(root)
         self._syncing = False
         self.render()
+        root.update_idletasks()
+        margin = 16
+        width = max(520, root.winfo_reqwidth())
+        height = root.winfo_reqheight() + margin
+        root.geometry(f"{width}x{height}")
+        root.minsize(width, height)
         self._after_id = root.after(50, self.poll)
 
     def close(self) -> None:
