@@ -47,7 +47,10 @@ def test_window_shows_default_hotkeys_and_capture():
     events: queue.Queue = queue.Queue()
     app = App(root, controller, events)
     root.deiconify()
-    root.update_idletasks()
+    root.update()
+    if not root.winfo_viewable():
+        root.destroy()
+        pytest.skip("当前环境无法显示窗口")
     assert root.title() == "按键精灵"
     assert app.click_button.cget("text") == "开始连点"
     assert app.hotkey_value_labels["toggle_click"].cget("text") == "F6"
