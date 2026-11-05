@@ -2,40 +2,56 @@ from __future__ import annotations
 
 import sys
 
-if sys.platform == "win32":
-    import ctypes
-    from ctypes import wintypes
 
-    _user32 = ctypes.WinDLL("user32", use_last_error=True)
-    _user32.SetProcessDpiAwarenessContext.restype = wintypes.BOOL
-    _user32.SetProcessDpiAwarenessContext.argtypes = [ctypes.c_void_p]
-    # 必须先于 tkinter。否则回放只能改到坐标，屏幕上的指针不动。
-    _user32.SetProcessDpiAwarenessContext(ctypes.c_void_p(-4))
+def _enable_per_monitor_dpi() -> None:
+    if sys.platform != "win32":
+        return
+    try:
+        import ctypes
+        from ctypes import wintypes
 
-import queue
-from pathlib import Path
-
-import tkinter as tk
-
-from key_wizard.backend import PynputBackend
-from key_wizard.config_store import load_config, load_recording, save_config, save_recording
-from key_wizard.controller import Controller
-from key_wizard.engine import Engine
-from key_wizard.ui import App
+        user32 = ctypes.WinDLL("user32", use_last_error=True)
+        user32.SetProcessDpiAwarenessContext.restype = wintypes.BOOL
+        user32.SetProcessDpiAwarenessContext.argtypes = [ctypes.c_void_p]
+        # 必须先于 tkinter。否则回放只能改到坐标，屏幕上的指针不动。
+        user32.SetProcessDpiAwarenessContext(ctypes.c_void_p(-4))
+    except (AttributeError, OSError):
+        return
 
 
-ROOT = Path(__file__).resolve().parent
-DATA = ROOT / "data"
-CONFIG_PATH = DATA / "config.json"
-RECORDING_PATH = DATA / "recording.json"
+def _report_startup_failure(exc: BaseException) -> None:
+    message = f"按键精灵启动失败：\n{exc}"
+    if sys.platform == "win32":
+        import ctypes
+
+        ctypes.windll.user32.MessageBoxW(None, message, "按键精灵", 0x10)
+    else:
+        print(message, file=sys.stderr)
+
+
+_enable_per_monitor_dpi()
 
 
 def main() -> None:
-    DATA.mkdir(parents=True, exist_ok=True)
-    config, warning = load_config(CONFIG_PATH)
-    if not CONFIG_PATH.exists():
-        save_config(CONFIG_PATH, config)
-    recording, _recording_warning = load_recording(RECORDING_PATH)
+    import queue
+
+    import tkinter as tk
+
+    from key_wizard.backend import PynputBackend
+    from key_wizard.config_store import load_config, load_recording, save_config, save_recording
+    from key_wizard.controller import Controller
+    from key_wizard.engine import Engine
+    from key_wizard.paths import data_dir
+    from key_wizard.ui import App
+
+    data = data_dir()
+    data.mkdir(parents=True, exist_ok=True)
+    config_path = data / "config.json"
+    recording_path = data / "recording.json"
+    config, warning = load_config(config_path)
+    if not config_path.exists():
+        save_config(config_path, config)
+    recording, _recording_warning = load_recording(recording_path)
     backend = PynputBackend()
     engine = Engine(backend)
     engine.recording = recording
@@ -51,8 +67,8 @@ def main() -> None:
     controller = Controller(
         config,
         engine,
-        lambda item: save_config(CONFIG_PATH, item),
-        lambda items: save_recording(RECORDING_PATH, items),
+        lambda item: save_config(config_path, item),
+        lambda items: save_recording(recording_path, items),
         rebind,
         on_shutdown,
     )
@@ -67,4 +83,8 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except Exception as exc:
+        _report_startup_failure(exc)
+        raise
