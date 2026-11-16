@@ -3,10 +3,13 @@ from __future__ import annotations
 import time
 from collections.abc import Callable
 from dataclasses import dataclass, replace
+from datetime import datetime
 
 from key_wizard.config_store import ConfigError, recording_duration_ms, validate_click_fields, validate_repeat
 from key_wizard.keys import display_key, normalize_hotkey
 from key_wizard.models import AppConfig, Hotkeys, MouseEvent, Progress, RunState
+from key_wizard.power import UnsupportedShutdown
+from key_wizard.shutdown_at import ShutdownMoment, parse_shutdown_text
 
 _TOGGLE_SUPPRESS_S = 0.5
 
@@ -32,6 +35,8 @@ class ViewState:
     replay_label: str
     summary: str
     capturing: str | None
+    shutdown_preview: str
+    shutdown_cancel_enabled: bool
 
 
 class Controller:
@@ -43,6 +48,8 @@ class Controller:
         save_recording: Callable[[list[MouseEvent]], None],
         rebind: Callable[[Hotkeys], bool],
         on_shutdown: Callable[[], None] | None = None,
+        power=None,
+        clock: Callable[[], datetime] | None = None,
     ) -> None:
         self.edited = config
         self.applied = config
@@ -51,11 +58,17 @@ class Controller:
         self._save_recording = save_recording
         self._rebind = rebind
         self._on_shutdown = on_shutdown
+        self._power = power if power is not None else UnsupportedShutdown()
+        self._clock = clock or datetime.now
         self.status = "空闲"
         self.capturing: str | None = None
         self._dirty = False
         self._last_progress: Progress | None = None
         self._suppress_until = {"click": 0.0, "replay": 0.0}
+        self._shutdown_draft = ""
+        self._armed_draft = ""
+        self._shutdown_armed: ShutdownMoment | None = None
+        self._shutdown_error = ""
 
     def view(self) -> ViewState:
         click = self.edited.click
@@ -86,7 +99,41 @@ class Controller:
             replay_label="停止回放" if state == RunState.PLAYING else "开始回放",
             summary=summary,
             capturing=self.capturing,
+            shutdown_preview=self._shutdown_preview(),
+            shutdown_cancel_enabled=self._shutdown_armed is not None,
         )
+
+    def set_shutdown_draft(self, text: str) -> None:
+        self._shutdown_draft = text
+        self._shutdown_error = ""
+
+    def arm_shutdown(self) -> None:
+        draft = self._normalized_shutdown_draft()
+        try:
+            moment = parse_shutdown_text(draft, self._clock())
+        except ValueError as exc:
+            self._shutdown_error = str(exc)
+            return
+        try:
+            self._power.schedule(moment.delay_seconds)
+        except OSError as exc:
+            self._shutdown_error = str(exc)
+            return
+        self._shutdown_armed = moment
+        self._armed_draft = draft
+        self._shutdown_error = ""
+
+    def cancel_shutdown(self) -> None:
+        if self._shutdown_armed is None:
+            return
+        try:
+            self._power.cancel()
+        except OSError as exc:
+            self._shutdown_error = str(exc)
+            return
+        self._shutdown_armed = None
+        self._armed_draft = ""
+        self._shutdown_error = ""
 
     def commit_mode(self, mode: str) -> None:
         if mode not in ("fixed", "random"):
@@ -271,6 +318,31 @@ class Controller:
         if hotkeys_changed:
             if not self._rebind(self.applied.hotkeys):
                 self.status = "热键监听失败"
+
+    def _normalized_shutdown_draft(self) -> str:
+        return self._shutdown_draft.strip().replace("：", ":")
+
+    def _shutdown_preview(self) -> str:
+        if self._shutdown_error:
+            return self._shutdown_error
+        draft = self._normalized_shutdown_draft()
+        armed = self._shutdown_armed
+        if armed is not None and draft == self._armed_draft:
+            return f"已设定：{armed.when_text} 关机"
+        if not draft:
+            if armed is not None:
+                return f"已设定：{armed.when_text} 关机"
+            return "输入 23:30，或输入 30 表示 30 分钟后"
+        try:
+            moment = parse_shutdown_text(draft, self._clock())
+        except ValueError as exc:
+            if armed is not None:
+                return f"{exc}。当前仍会在{armed.when_text} 关机"
+            return str(exc)
+        preview = f"预计{moment.when_text} 关机"
+        if armed is not None:
+            preview += f"。当前仍会在{armed.when_text} 关机"
+        return preview
 
     def _status_text(self) -> str:
         if self.engine.state != RunState.IDLE and self._last_progress is not None:

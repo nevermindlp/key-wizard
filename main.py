@@ -42,6 +42,7 @@ def main() -> None:
     from key_wizard.controller import Controller
     from key_wizard.engine import Engine
     from key_wizard.paths import data_dir
+    from key_wizard.power import UnsupportedShutdown, WindowsShutdown
     from key_wizard.ui import App
 
     data = data_dir()
@@ -64,6 +65,7 @@ def main() -> None:
         backend.stop_hotkey_listener()
         backend.stop_mouse_listener()
 
+    power = WindowsShutdown() if sys.platform == "win32" else UnsupportedShutdown()
     controller = Controller(
         config,
         engine,
@@ -71,6 +73,7 @@ def main() -> None:
         lambda items: save_recording(recording_path, items),
         rebind,
         on_shutdown,
+        power,
     )
     if warning:
         controller.status = warning

@@ -52,6 +52,7 @@ def test_window_shows_default_hotkeys_and_capture():
         root.destroy()
         pytest.skip("当前环境无法显示窗口")
     assert root.title() == "按键精灵"
+    assert "23:30" in app.shutdown_preview.cget("text")
     assert app.click_button.cget("text") == "开始连点"
     assert app.hotkey_value_labels["toggle_click"].cget("text") == "F6"
     assert str(app.fixed_entry.cget("state")) == "normal"

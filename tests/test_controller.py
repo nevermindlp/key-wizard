@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from key_wizard.config_store import default_config
 from key_wizard.controller import Controller
 from key_wizard.models import MouseEvent, Progress, RunState
@@ -256,6 +258,74 @@ def test_start_click_flushes_pending_edit_before_snapshot():
     status = controller.view().status
     assert "已点击" in status
     assert status != "空闲"
+
+
+class FakePower:
+    def __init__(self, fail_schedule: str = "", fail_cancel: str = "") -> None:
+        self.calls: list[tuple] = []
+        self.fail_schedule = fail_schedule
+        self.fail_cancel = fail_cancel
+
+    def schedule(self, delay_seconds: int) -> None:
+        self.calls.append(("schedule", delay_seconds))
+        if self.fail_schedule:
+            raise OSError(self.fail_schedule)
+
+    def cancel(self) -> None:
+        self.calls.append(("cancel",))
+        if self.fail_cancel:
+            raise OSError(self.fail_cancel)
+
+
+def test_countdown_preview_shows_the_resulting_clock_time():
+    controller, _engine, _saved, _rebinds = _setup()
+    controller._clock = lambda: datetime(2026, 11, 16, 15, 22, 40)
+    controller.set_shutdown_draft("30")
+    assert controller.view().shutdown_preview == "预计今天 15:52 关机"
+    assert controller.view().shutdown_cancel_enabled is False
+
+
+def test_clock_and_countdown_can_replace_one_schedule():
+    controller, _engine, _saved, _rebinds = _setup()
+    controller._clock = lambda: datetime(2026, 11, 16, 15, 22, 40)
+    power = FakePower()
+    controller._power = power
+    controller.set_shutdown_draft("30")
+    controller.arm_shutdown()
+    assert power.calls == [("schedule", 1800)]
+    assert controller.view().shutdown_preview == "已设定：今天 15:52 关机"
+    controller.set_shutdown_draft("23:30")
+    assert controller.view().shutdown_preview == "预计今天 23:30 关机。当前仍会在今天 15:52 关机"
+    controller.arm_shutdown()
+    assert power.calls[-1] == ("schedule", 8 * 3600 + 7 * 60 + 20)
+    assert controller.view().shutdown_preview == "已设定：今天 23:30 关机"
+    assert controller.view().shutdown_cancel_enabled is True
+
+
+def test_cancel_clears_the_schedule_and_closing_the_window_does_not():
+    controller, _engine, _saved, _rebinds = _setup()
+    controller._clock = lambda: datetime(2026, 11, 16, 15, 0)
+    power = FakePower()
+    controller._power = power
+    controller.set_shutdown_draft("10")
+    controller.arm_shutdown()
+    controller.shutdown()
+    assert power.calls == [("schedule", 600)]
+    controller.cancel_shutdown()
+    assert power.calls[-1] == ("cancel",)
+    assert controller.view().shutdown_cancel_enabled is False
+    assert controller.view().shutdown_preview == "预计今天 15:10 关机"
+
+
+def test_failed_schedule_stays_unset():
+    controller, _engine, _saved, _rebinds = _setup()
+    controller._clock = lambda: datetime(2026, 11, 16, 15, 0)
+    controller._power = FakePower(fail_schedule="定时关机失败")
+    controller.set_shutdown_draft("10")
+    controller.arm_shutdown()
+    view = controller.view()
+    assert view.shutdown_preview == "定时关机失败"
+    assert view.shutdown_cancel_enabled is False
 
 
 def test_text_focus_does_not_start_click():

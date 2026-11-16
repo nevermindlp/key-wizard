@@ -27,6 +27,7 @@ class App:
         self.status_label.pack(fill="x", padx=12, pady=(12, 6))
         self._build_click(root)
         self._build_record(root)
+        self._build_shutdown(root)
         self._build_hotkeys(root)
         self._syncing = False
         self.render()
@@ -70,6 +71,8 @@ class App:
         self._set_entry(self.count_entry, self.count_var, view.count, True)
         self._set_entry(self.repeat_entry, self.repeat_var, view.repeat, True)
         self.summary_label.configure(text=view.summary)
+        self.shutdown_preview.configure(text=view.shutdown_preview)
+        self.cancel_shutdown_button.configure(state=self._state(view.shutdown_cancel_enabled))
         self.click_button.configure(text=view.click_label, state=self._state(view.click_enabled))
         self.record_button.configure(state=self._state(view.start_record_enabled))
         self.stop_record_button.configure(state=self._state(view.stop_record_enabled))
@@ -111,6 +114,23 @@ class App:
         self.stop_record_button.grid(row=2, column=1, sticky="ew", padx=8, pady=8)
         self.replay_button.grid(row=3, column=0, columnspan=2, sticky="ew", padx=8, pady=(0, 8))
 
+    def _build_shutdown(self, root: tk.Tk) -> None:
+        frame = ttk.LabelFrame(root, text="定时关机")
+        frame.pack(fill="x", padx=12, pady=6)
+        ttk.Label(frame, text="钟点或分钟").grid(row=0, column=0, sticky="w", padx=8, pady=4)
+        self.shutdown_var = tk.StringVar()
+        self.shutdown_entry = ttk.Entry(frame, textvariable=self.shutdown_var, width=18)
+        self.shutdown_entry.grid(row=0, column=1, sticky="ew", padx=8, pady=4)
+        self.shutdown_entry.bind("<KeyRelease>", lambda _event: self._edit_shutdown())
+        self.shutdown_entry.bind("<Return>", lambda _event: self._arm_shutdown())
+        self.shutdown_preview = ttk.Label(frame, text="")
+        self.shutdown_preview.grid(row=1, column=0, columnspan=2, sticky="w", padx=8, pady=4)
+        ttk.Label(frame, text="到点会关机，关闭窗口也不会取消").grid(row=2, column=0, columnspan=2, sticky="w", padx=8, pady=4)
+        self.shutdown_button = ttk.Button(frame, text="定时关机", command=self._arm_shutdown)
+        self.cancel_shutdown_button = ttk.Button(frame, text="取消关机", command=self._cancel_shutdown)
+        self.shutdown_button.grid(row=3, column=0, sticky="ew", padx=8, pady=8)
+        self.cancel_shutdown_button.grid(row=3, column=1, sticky="ew", padx=8, pady=8)
+
     def _build_hotkeys(self, root: tk.Tk) -> None:
         frame = ttk.LabelFrame(root, text="快捷键")
         frame.pack(fill="x", padx=12, pady=6)
@@ -149,6 +169,7 @@ class App:
             self.max_entry,
             self.count_entry,
             self.repeat_entry,
+            self.shutdown_entry,
         )
 
     def _begin_capture(self, field: str) -> None:
@@ -175,6 +196,21 @@ class App:
 
     def _commit_repeat(self) -> None:
         self._commit(lambda: self.controller.commit_repeat(self.repeat_var.get()))
+
+    def _edit_shutdown(self) -> None:
+        if self._syncing:
+            return
+        self.controller.set_shutdown_draft(self.shutdown_var.get())
+        self.render()
+
+    def _arm_shutdown(self) -> None:
+        self.controller.set_shutdown_draft(self.shutdown_var.get())
+        self.controller.arm_shutdown()
+        self.render()
+
+    def _cancel_shutdown(self) -> None:
+        self.controller.cancel_shutdown()
+        self.render()
 
     def _commit(self, action) -> None:
         if self._syncing:
